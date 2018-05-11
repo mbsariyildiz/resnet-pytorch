@@ -2,7 +2,34 @@ import torch
 import torch.nn as nn
 import nn_ops
 
+def _down_sample(x):
+  return nn.functional.avg_pool2d(x, 2, 2)
+
+def _increase_planes(x, n_out_planes):
+  n_samples, n_planes, spatial_size = x.size()[:-1]
+  x_zeros = torch.zeros(
+    n_samples, n_out_planes - n_planes, spatial_size, spatial_size, 
+    dtype=x.dtype, device=x.device)
+  return torch.cat([x, x_zeros], 1)
+
+def _downsample_and_increase_planes(x, n_out_planes):
+  x = _down_sample(x)
+  x = _increase_planes(x, n_out_planes)
+  return x
+
+def identity_func(n_in_planes, n_out_planes, stride):
+  identity = lambda x: x
+  if stride == 2 and n_in_planes != n_out_planes:
+    identity = lambda x: _downsample_and_increase_planes(x, n_out_planes)
+  elif stride == 2:
+    identity = _down_sample
+  elif n_in_planes != n_out_planes:
+    identity = lambda x: _increase_planes(x, n_out_planes)
+  return identity
+
 class BasicBlock(nn.Module):
+
+  expansion = 1
 
   def __init__(self, n_in_planes, n_out_planes, stride=1):
     super().__init__()
@@ -16,28 +43,7 @@ class BasicBlock(nn.Module):
       nn.BatchNorm2d(n_out_planes)
     )
 
-    self.identity = lambda x: x
-    if stride == 2 and n_in_planes != n_out_planes:
-      self.identity = lambda x: self.__downsample_and_increase_planes(x, n_out_planes)
-    elif stride == 2:
-      self.identity = self.__down_sample
-    elif n_in_planes != n_out_planes:
-      self.identity = lambda x: self.__increase_planes(x, n_out_planes)
-
-  def __down_sample(self, x):
-    return nn.functional.avg_pool2d(x, 2, 2)
-
-  def __increase_planes(self, x, n_out_planes):
-    n_samples, n_planes, spatial_size = x.size()[:-1]
-    x_zeros = torch.zeros(
-      n_samples, n_out_planes - n_planes, spatial_size, spatial_size, 
-      dtype=x.dtype, device=x.device)
-    return torch.cat([x, x_zeros], 1)
-
-  def __downsample_and_increase_planes(self, x, n_out_planes):
-    x = self.__down_sample(x)
-    x = self.__increase_planes(x, n_out_planes)
-    return x
+    self.identity = identity_func(n_in_planes, n_out_planes, stride)
 
   def forward(self, x):
     out = self.block(x)
@@ -45,6 +51,43 @@ class BasicBlock(nn.Module):
 
     out += identity
     out = nn.functional.relu(out)
+    return out
+
+class Bottleneck(nn.Module):
+
+  expansion = 4
+
+  def __init__(self, n_in_planes, n_out_planes, stride=1):
+    super().__init__()
+    
+    self.conv1 = nn.Conv2d(n_in_planes, n_out_planes, kernel_size=1)
+    self.bn1 = nn.BatchNorm2d(n_out_planes)
+
+    self.conv2 = nn_ops.conv3x3(n_out_planes, n_out_planes, stride)
+    self.bn2 = nn.BatchNorm2d(n_out_planes)
+
+    self.conv3 = nn.Conv2d(n_out_planes, n_out_planes * 4, kernel_size=1)
+    self.bn3 = nn.BatchNorm2d(n_out_planes * 4)
+
+    self.relu = nn.ReLU(inplace=True)
+    self.identity = identity_func(n_in_planes, n_out_planes * 4, stride)
+
+  def forward(self, x):
+    out = self.conv1(x)
+    out = self.bn1(out)
+    out = self.relu(out)
+
+    out = self.conv2(out)
+    out = self.bn2(out)
+    out = self.relu(out)
+
+    out = self.conv3(out)
+    out = self.bn3(out)
+
+    identity = self.identity(x)
+    out += identity
+    out = self.relu(out)
+
     return out
 
 class ResNet(nn.Module):
@@ -60,7 +103,7 @@ class ResNet(nn.Module):
     self.n_in_planes = n_output_planes[0]
 
     self.layer0 = nn.Sequential(
-      nn_ops.conv3x3(3, self.n_in_planes, 1),
+      nn_ops.conv3x3(3, self.n_in_planes),
       nn.BatchNorm2d(self.n_in_planes),
       nn.ReLU(inplace=True)
     )
@@ -69,14 +112,14 @@ class ResNet(nn.Module):
     self.layer3 = self._make_layer(block, n_blocks[2], n_output_planes[2], 2)
     self.layer4 = self._make_layer(block, n_blocks[3], n_output_planes[3], 2)
     self.avgpool = nn.AvgPool2d(4, stride=1)
-    self.fc = nn.Linear(n_output_planes[3], n_classes, False)
+    self.fc = nn.Linear(n_output_planes[3] * block.expansion, n_classes, False)
 
     self.apply(nn_ops.variable_init)
 
   def _make_layer(self, block, n_blocks, n_out_planes, stride=1):
     layers = []
     layers.append(block(self.n_in_planes, n_out_planes, stride))
-    self.n_in_planes = n_out_planes
+    self.n_in_planes = n_out_planes * block.expansion
     for i in range(1, n_blocks):
       layers.append(block(self.n_in_planes, n_out_planes))
 
@@ -105,3 +148,6 @@ def ResNet18(**kwargs):
 
 def ResNet34(**kwargs):
   return ResNet(BasicBlock, [3,4,6,3], **kwargs)
+
+def ResNet50(**kwargs):
+  return ResNet(Bottleneck, [3,4,6,3], **kwargs)

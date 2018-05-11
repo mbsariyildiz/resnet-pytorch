@@ -82,14 +82,22 @@ class ConvNet(BaseClassifier):
                      init_lr=0.1,
                      momentum=0.9,
                      weight_decay=5e-4,
-                     device='cpu',
+                     device='cuda',
                      log_dir='',
-                     ckpt_file=''):
+                     ckpt_file='',
+                     model='resnet-10'):
     super().__init__(n_class, init_lr, momentum, weight_decay, device) 
     
     self.n_planes = [64, 128, 256, 512]
-    self.net = resnet.ResNet10(n_classes=self.n_class,
-                               n_output_planes=self.n_planes).to(self.device)
+    if model == 'resnet-10':
+      self.net = resnet.ResNet10(n_classes=self.n_classes, n_output_planes=self.n_planes)
+    if model == 'resnet-18':
+      self.net = resnet.ResNet18(n_classes=self.n_classes, n_output_planes=self.n_planes)
+    elif model == 'resnet-34':
+      self.net = resnet.ResNet34(n_classes=self.n_classes, n_output_planes=self.n_planes)
+    elif model == 'resnet-50':
+      self.net = resnet.ResNet50(n_classes=self.n_classes, n_output_planes=self.n_planes)
+
     self.optim = torch.optim.SGD(self.net.parameters(),
                                  self.init_lr,
                                  momentum=self.momentum,
