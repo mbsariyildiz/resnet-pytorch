@@ -5,12 +5,12 @@ import utils
 import clf_tools
 
 class BaseClassifier(object):
-  def __init__(self, n_class,
+  def __init__(self, n_classes,
                      init_lr=0.1,
                      momentum=0.9,
                      weight_decay=5e-4,
                      device='cpu'):
-    self.n_class = n_class
+    self.n_classes = n_classes
     self.init_lr = init_lr
     self.momentum = momentum
     self.weight_decay = weight_decay
@@ -78,15 +78,16 @@ class BaseClassifier(object):
 
 class ConvNet(BaseClassifier):
 
-  def __init__(self, n_class,
+  def __init__(self, n_classes,
                      init_lr=0.1,
                      momentum=0.9,
                      weight_decay=5e-4,
                      device='cuda',
                      log_dir='',
                      ckpt_file='',
-                     model='resnet-10'):
-    super().__init__(n_class, init_lr, momentum, weight_decay, device) 
+                     model='resnet-10',
+                     multi_gpu=True):
+    super().__init__(n_classes, init_lr, momentum, weight_decay, device) 
     
     self.n_planes = [64, 128, 256, 512]
     if model == 'resnet-10':
@@ -97,12 +98,7 @@ class ConvNet(BaseClassifier):
       self.net = resnet.ResNet34(n_classes=self.n_classes, n_output_planes=self.n_planes)
     elif model == 'resnet-50':
       self.net = resnet.ResNet50(n_classes=self.n_classes, n_output_planes=self.n_planes)
-
-    self.optim = torch.optim.SGD(self.net.parameters(),
-                                 self.init_lr,
-                                 momentum=self.momentum,
-                                 weight_decay=self.weight_decay)
-    self.criterion = torch.nn.CrossEntropyLoss().to(self.device)
+    self.net.to(self.device)
 
     if ckpt_file:
       print ('loading pretrained classifier checkpoint')
@@ -111,6 +107,16 @@ class ConvNet(BaseClassifier):
       else:
         ckpt = torch.load(ckpt_file)
       self.net.load_state_dict(ckpt['clf'])
+
+    if multi_gpu and self.device == 'cuda':
+      print ('replicating model on multiple gpus ... ')
+      self.net = torch.nn.DataParallel(self.net)
+
+    self.optim = torch.optim.SGD(self.net.parameters(),
+                                 self.init_lr,
+                                 momentum=self.momentum,
+                                 weight_decay=self.weight_decay)
+    self.criterion = torch.nn.CrossEntropyLoss().to(self.device)
 
     print('Number of dnn parameters: {}'.format(
       sum([p.data.nelement() for p in self.net.parameters()])))

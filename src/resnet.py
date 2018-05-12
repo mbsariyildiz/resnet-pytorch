@@ -111,7 +111,6 @@ class ResNet(nn.Module):
     self.layer2 = self._make_layer(block, n_blocks[1], n_output_planes[1], 2)
     self.layer3 = self._make_layer(block, n_blocks[2], n_output_planes[2], 2)
     self.layer4 = self._make_layer(block, n_blocks[3], n_output_planes[3], 2)
-    self.avgpool = nn.AvgPool2d(4, stride=1)
     self.fc = nn.Linear(n_output_planes[3] * block.expansion, n_classes, False)
 
     self.apply(nn_ops.variable_init)
@@ -131,7 +130,8 @@ class ResNet(nn.Module):
     x = self.layer2(x)
     x = self.layer3(x)
     x = self.layer4(x)
-    x = self.avgpool(x)
+    spatial_size = x.size(2)
+    x = nn.functional.avg_pool2d(x, spatial_size, 1)
     x = x.view(x.size(0), -1)
     return x
 

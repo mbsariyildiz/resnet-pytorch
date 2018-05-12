@@ -25,7 +25,8 @@ def main(args):
                            args.device,
                            args.exp_dir,
                            '',
-                           args.model)
+                           args.model,
+                           args.multi_gpu)
   
   test_accs = np.zeros([args.n_epochs], 'float32')
   train_accs = np.zeros([args.n_epochs], 'float32')
@@ -80,14 +81,15 @@ if __name__ == "__main__":
     choices=['cifar10', 'cifar100'])
   parser.add_argument('--model', type=str, default='resnet-10', 
     choices=['resnet-10', 'resnet-18', 'resnet-34', 'resnet-50'])
+  parser.add_argument('--device', type=str, default='cuda', 
+    choices=['cpu', 'cuda'])
+  parser.add_argument('--multi_gpu', type=bool, default=True)
   parser.add_argument('--init_lr', type=float, default=0.1)
   parser.add_argument('--lr_dec_rate', type=float, default=0.1)
   parser.add_argument('--lr_dec_int', type=int, default=100)
   parser.add_argument('--weight_decay', type=float, default=5e-4)
   parser.add_argument('--momentum', type=float, default=0.9 )
   parser.add_argument('--tensorboard', type=bool, default=True)
-  parser.add_argument('--device', type=str, default='cuda', 
-    choices=['cpu', 'cuda'])
   parser.add_argument('--batch_size', type=int, default=128)
   parser.add_argument('--test_batch_size', type=int, default=128)
   parser.add_argument('--n_epochs', type=int, default=300)
