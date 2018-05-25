@@ -48,13 +48,13 @@ def main(args):
       test_acc = clf.test(test_loader)
 
       if args.tensorboard:
-        log_value('test_acc', train_acc, epoch)
+        log_value('test_acc', test_acc, epoch)
         log_value('train_acc', train_acc, epoch)
         log_value('train_loss', train_loss, epoch)
         log_value('learning_rate', lr, epoch)
       else:
         tqdm.write('train_acc:{:.1f}, test_acc{:.1f}'.format(
-          train_acc, train_acc))
+          train_acc, test_acc))
 
       test_accs[epoch] = test_acc
       train_accs[epoch] = train_acc
